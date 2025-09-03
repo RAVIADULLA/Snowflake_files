@@ -53,6 +53,8 @@ select * from emp_s3;
 
 desc table emp_s3;
 
+remove @my_s3_stage/dep.csv
+
 copy into emp_s3
 from @my_s3_stage/dep.csv
 file_format = (type = 'csv' field_delimiter = '\,' skip_header = 1 error_on_column_count_mismatch=false)
@@ -69,4 +71,5 @@ purge = true
 ;
 
 list@my_s3_stage
+
 
