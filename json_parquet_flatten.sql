@@ -19,6 +19,7 @@ from FIRST_JASON;
 
 SELECT
 C1:activityLogs,
+a1.value:activity,
 a1.value:activity::string as activity,
 a1.value:timestamp::timestamp as timestamp_value
 FROM
