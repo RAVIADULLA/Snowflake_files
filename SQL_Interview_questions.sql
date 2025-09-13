@@ -38,9 +38,9 @@ CONNECT BY PRIOR e.emp_id = e.manager_id;
 
 --Or start at :emp_id and flip the CONNECT BY to walk upward:
 
-SELECT  LEVEL AS lvl_up,
-        e.emp_id,
+SELECT  e.emp_id,
         e.emp_name,
+        LEVEL AS lvl_up,
         SYS_CONNECT_BY_PATH(e.emp_name, ' -> ') AS up_chain
 FROM    employees e
 START WITH e.emp_id = :emp_id
@@ -158,6 +158,7 @@ WHERE purchase_date >= DATEADD(MONTH, -1, purchase_date)
 and (return_date is null or return_date > DATEADD(week, 1, purchase_date))
 group by customer_id
 having count(customer_id) > 1;
+
 
 
 
