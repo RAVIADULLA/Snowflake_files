@@ -98,7 +98,67 @@ lag(sal) over (partition by deptno order by deptno desc) as previous_sal, -- def
 lag(sal,2,0) over (partition by deptno order by deptno desc) as previous_2_sal, -- default values 0
 lead(sal) over (partition by deptno order by deptno desc) as previous_sal, -- default value is null
 lead(sal,2,0) over (partition by deptno order by deptno desc) as previous_2_sal, -- default values 0
-from emp e
+from emp e;
+
+select * from purchases;
+select * from customers;
+select * from orders;
+
+with customer_2025 as 
+        (select * from orders where year(order_date)=2025),
+     customer_2024 as 
+        (select customer_id,
+                count(month(order_date)) as unique_monthly_orders
+         from orders where year(order_date)=2024
+         group by customer_id
+         having count(distinct(month(order_date))) >= 12
+         ),
+     customer_2023 as 
+         ( select customer_id,
+                  count(month(order_date)) as unique_monthly_orders 
+           from orders
+           where year(order_date)=2023
+           group by customer_id
+           having count(distinct(month(order_date))) >= 6 
+         )
+select c.name as customer
+from customers c
+join customer_2024 c24 on c24.customer_id =c.customer_id
+join customer_2023 c23 on c23.customer_id =c.customer_id
+where c.customer_id not in (select customer_id from customer_2025);
+
+with cte as 
+    ( select c.customer_id,c.name as customer,
+             year(order_date) order_year,
+             count(month(order_date)) as unique_monthly_orders
+      from orders o
+      join customers c on c.customer_id = o.customer_id
+           group by c.customer_id,c.name,order_year
+    )
+select c23.customer
+from cte c23
+join cte c24 on c23.customer_id = c24.customer_id
+where c23.order_year=2023 and c23.unique_monthly_orders >=6
+and c24.order_year=2024 and c24.unique_monthly_orders >=12
+and c23.customer_id not in(select customer_id from cte where order_year=2025)
+
+select customer_name,
+coalesce(order_Date,'9999-01-01') as last_order_date,
+coalesce(sum(total_cost),0) as total_value
+from
+(select ord.*,cust.name as customer_name,
+rank() over (partition by customer_id order by order_date desc) as  rnk
+from customers cust left outer join orders ord on cust.id=ord.customer_id) x
+where rnk=1
+group by customer_name,customer_id,order_Date;
+
+SELECT  customer_id--, count(customer_id) as no_of_purchases
+from purchases
+WHERE purchase_date >= DATEADD(MONTH, -1, purchase_date)
+and (return_date is null or return_date > DATEADD(week, 1, purchase_date))
+group by customer_id
+having count(customer_id) > 1;
+
 
 
 
