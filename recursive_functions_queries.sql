@@ -31,3 +31,12 @@ with recursive emp_hierarchy as
        )
 SELECT h2.empno as empno, h2.ename as emp_name, e2.ename as manager_name, h2.lvl as level
 FROM emp_hierarchy h2 join emp_before_update e2 on e2.empno = h2.mgr;
+
+
+SELECT  e.empno,
+        e.ename,
+        LEVEL AS lvl_up,
+        SYS_CONNECT_BY_PATH(e.ename, ' -> ') AS up_chain
+FROM    emp e
+START WITH e.empno = :empno
+CONNECT BY PRIOR e.mgr = e.empno;
