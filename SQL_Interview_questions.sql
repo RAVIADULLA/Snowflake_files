@@ -372,3 +372,50 @@ ORDER BY carriermemid, coverage_group;
 
 This yields exactly the output you showed for your sample data.
 
+----Below query transpose columns into rows. 
+Name No Add1 Add2 
+abc 100 Hyd bang 
+xyz 200 Mysore pune 
+ 
+SQL> SELECT NAME, NO, add1 FROM a 
+UNION 
+SELECT NAME, NO, add2 FROM a; 
+
+----4. Below query transpose rows into columns. 
+SQL> SELECT   emp_id, MAX (DECODE (row_id, 0, address)) AS address1, 
+         MAX (DECODE (row_id, 1, address)) AS address2, 
+         MAX (DECODE (row_id, 2, address)) AS address3 
+    FROM (SELECT   emp_id, address, MOD (ROWNUM, 3) row_id FROM temp 
+          ORDER BY emp_id) 
+GROUP BY emp_id; 
+ 
+Other query: 
+SQL> SELECT   emp_id, MAX (DECODE (rank_id, 1, address)) AS add1, 
+         MAX (DECODE (rank_id, 2, address)) AS add2, 
+         MAX (DECODE (rank_id, 3, address)) AS add3 
+    FROM (SELECT emp_id, address, 
+                 RANK () OVER (PARTITION BY emp_id ORDER BY emp_id, 
+                  address) rank_id 
+            FROM temp) 
+GROUP BY emp_id;
+
+-- How to display alternative rows in a table? 
+SQL> SELECT * FROM emp 
+WHERE (ROWID, 0) IN  
+(SELECT ROWID, MOD (ROWNUM, 2) FROM emp); 
+
+-- Hierarchical queries 
+--Starting at the root, walk from the top down, and eliminate employee Higgins in the 
+--result, but process the child rows. 
+SQL> SELECT department_id, employee_id, last_name, job_id, salary 
+FROM employees 
+WHERE last_name ! = 'Higgins' 
+START WITH manager_id IS NULL 
+CONNECT BY PRIOR employee_id = manager_id; 
+
+ SELECT Deptno, LISTAGG(Ename, ‘,’)  
+     WITHIN GROUP (ORDER BY Ename) as Emp_Name 
+     FROM Employees 
+     GROUP BY Deptno;
+
+
