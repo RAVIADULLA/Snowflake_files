@@ -206,3 +206,169 @@ join cte c24 on c23.customer_id = c24.customer_id
 where c23.order_year = 2023 and c23.unique_monthly_orders >= 6
 and c24.order_year = 2024 and c24.unique_monthly_orders >= 12
 and c23.customer_id not in (select customer_id from cte where order_year = 2025);
+
+--------------------------------------------------------------------------------
+
+this is the input data  
+ enrollid	carriermemid	planid	effdate	termdate
+1	101	A	01-01-2023	30-06-2023
+2	101	A	01-07-2023	31-12-2023
+3	101	B	15-01-2024	30-06-2024
+4	102	C	01-03-2023	31-08-2023
+5	102	C	01-09-2023	28-02-2024
+6	102	D	02-03-2024	31-08-2024
+
+i want output like below data in oracle 
+
+carriermemid	coverage_group	start_date	end_date
+101	1	01-01-2023	31-12-2023
+101	2	15-01-2024	30-06-2024
+102	1	01-03-2023	28-02-2024
+102	2	02-03-2024	31-08-2024
+ChatGPT said:
+Thought for 20s
+
+You can collapse contiguous rows (same plan, next effdate = prev termdate + 1) into “coverage groups” with analytics.
+
+Assuming a table enrollments(enrollid, carriermemid, planid, effdate, termdate) where dates are strings DD-MM-YYYY (convert as needed):
+
+-- 1) Normalize dates
+WITH s AS (
+  SELECT
+    carriermemid,
+    planid,
+    TO_DATE(effdate,  'DD-MM-YYYY') AS effdate,
+    TO_DATE(termdate, 'DD-MM-YYYY') AS termdate
+  FROM enrollments
+),
+-- 2) Mark a new group when plan changes OR there is a gap (non-adjacent dates)
+r AS (
+  SELECT
+    s.*,
+    CASE
+      WHEN LAG(planid)   OVER (PARTITION BY carriermemid ORDER BY effdate) = planid
+       AND LAG(termdate) OVER (PARTITION BY carriermemid ORDER BY effdate) + 1 = effdate
+      THEN 0 ELSE 1
+    END AS is_break
+  FROM s
+),
+-- 3) Running sum to assign group numbers starting at 1
+g AS (
+  SELECT
+    r.*,
+    SUM(is_break) OVER (
+      PARTITION BY carriermemid
+      ORDER BY effdate
+      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS coverage_group
+  FROM r
+)
+-- 4) Collapse each group to start/end
+SELECT
+  carriermemid,
+  coverage_group,
+  TO_CHAR(MIN(effdate),  'DD-MM-YYYY') AS start_date,
+  TO_CHAR(MAX(termdate), 'DD-MM-YYYY') AS end_date
+FROM g
+GROUP BY carriermemid, coverage_group
+ORDER BY carriermemid, coverage_group;
+
+
+What it does
+
+is_break = 1 when the plan changed or the next row doesn’t start the day after the previous termdate.
+
+The running SUM(is_break) gives coverage_group 1, 2, 3, …
+
+Final MIN(effdate)/MAX(termdate) roll up each group.
+
+This yields your desired output:
+
+carriermemid  coverage_group  start_date  end_date
+-----------   --------------  ----------  ----------
+101           1               01-01-2023  31-12-2023
+101           2               15-01-2024  30-06-2024
+102           1               01-03-2023  28-02-2024
+102           2               02-03-2024  31-08-2024
+
+
+If your base dates are already DATEs, drop the TO_DATE/TO_CHAR.
+
+You said:
+please provide the same query in oracle
+ChatGPT said:
+
+Here’s a ready-to-run Oracle solution that groups contiguous rows (same planid and next effdate = prev termdate + 1) into coverage groups and rolls them up.
+
+If your dates are stored as VARCHAR2 like DD-MM-YYYY
+WITH s AS (
+  SELECT
+    carriermemid,
+    planid,
+    TO_DATE(effdate,  'DD-MM-YYYY') AS effdate,
+    TO_DATE(termdate, 'DD-MM-YYYY') AS termdate
+  FROM enrollments
+),
+r AS (  -- mark a break when plan changes or gap exists
+  SELECT
+    s.*,
+    CASE
+      WHEN LAG(planid)   OVER (PARTITION BY carriermemid ORDER BY effdate) = planid
+       AND LAG(termdate) OVER (PARTITION BY carriermemid ORDER BY effdate) + 1 = effdate
+      THEN 0 ELSE 1
+    END AS is_break
+  FROM s
+),
+g AS (  -- running sum → group number starting at 1
+  SELECT
+    r.*,
+    SUM(is_break) OVER (
+      PARTITION BY carriermemid
+      ORDER BY effdate
+      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS coverage_group
+  FROM r
+)
+SELECT
+  carriermemid,
+  coverage_group,
+  TO_CHAR(MIN(effdate),  'DD-MM-YYYY') AS start_date,
+  TO_CHAR(MAX(termdate), 'DD-MM-YYYY') AS end_date
+FROM g
+GROUP BY carriermemid, coverage_group
+ORDER BY carriermemid, coverage_group;
+
+If effdate/termdate are already DATE
+
+Just drop the TO_DATE/TO_CHAR wrappers:
+
+WITH r AS (
+  SELECT
+    e.*,
+    CASE
+      WHEN LAG(planid)   OVER (PARTITION BY carriermemid ORDER BY effdate) = planid
+       AND LAG(termdate) OVER (PARTITION BY carriermemid ORDER BY effdate) + 1 = effdate
+      THEN 0 ELSE 1
+    END AS is_break
+  FROM enrollments e
+),
+g AS (
+  SELECT r.*,
+         SUM(is_break) OVER (
+           PARTITION BY carriermemid
+           ORDER BY effdate
+           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+         ) AS coverage_group
+  FROM r
+)
+SELECT carriermemid,
+       coverage_group,
+       MIN(effdate)  AS start_date,
+       MAX(termdate) AS end_date
+FROM g
+GROUP BY carriermemid, coverage_group
+ORDER BY carriermemid, coverage_group;
+
+
+This yields exactly the output you showed for your sample data.
+
